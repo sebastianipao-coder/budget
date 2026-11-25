@@ -218,7 +218,7 @@ h1{font-size:34px;line-height:1.15;font-weight:700;letter-spacing:.37px;margin:0
 </head>
 <body>
 <div id="app">
-  <div class="topbar" id="topbar"><div class="wrap"><span class="mini" id="miniTitle"></span><span id="topActions"></span></div></div>
+  <div class="topbar" id="topbar"><div class="wrap"><span class="mini" id="miniTitle"></span><span id="topActions" style="display:flex;gap:10px"></span></div></div>
   <main class="wrap view" id="view"></main>
 </div>
 
@@ -239,6 +239,7 @@ h1{font-size:34px;line-height:1.15;font-weight:700;letter-spacing:.37px;margin:0
 <script>
 /* ============ utilità ============ */
 const KEY='budget-v1', GKEY='giornate-v1';
+const IN_GIORNATE=location.pathname.includes('/giornate/');
 const MONTHS=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 const MONTHS_S=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
 const WD=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
@@ -395,9 +396,10 @@ function render(){
   const v=$('#view'); v.classList.remove('view'); void v.offsetWidth; v.classList.add('view');
   const titles={home:'Panoramica',mov:'Movimenti',pig:'Salvadanai',wish:'Wishlist',stats:'Analisi'};
   $('#miniTitle').textContent=titles[tab];
-  $('#topActions').innerHTML = tab==='home' ? `<button class="circle glass" data-act="settings" aria-label="Impostazioni">${ICON_GEAR}</button>`
+  const gLink = `<a class="circle glass" href="${IN_GIORNATE?'../':'../giornate/'}" aria-label="Apri Giornate" style="text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></a>`;
+  $('#topActions').innerHTML = gLink + (tab==='home' ? `<button class="circle glass" data-act="settings" aria-label="Impostazioni">${ICON_GEAR}</button>`
     : tab==='pig' ? `<button class="circle glass" data-act="piggy-new" aria-label="Nuovo salvadanaio">${ICON_PLUS}</button>`
-    : tab==='wish' ? `<button class="circle glass" data-act="wish-new" aria-label="Nuovo desiderio">${ICON_PLUS}</button>` : '';
+    : tab==='wish' ? `<button class="circle glass" data-act="wish-new" aria-label="Nuovo desiderio">${ICON_PLUS}</button>` : '');
   $('#fab').hidden = !(tab==='home'||tab==='mov');
   v.innerHTML = ({home:vHome,mov:vMov,pig:vPig,wish:vWish,stats:vStats})[tab]();
 }
@@ -433,7 +435,7 @@ function vHome(){
   if(g){ h+=`<div class="sec">Da Giornate</div><div class="card">
     <div class="row plain"><span class="ic" style="background:#34c75922">🗓️</span><span class="main"><div class="t">${cap(MONTHS[d.getMonth()])}: ${gm.days} ${gm.days===1?'giornata':'giornate'}</div><div class="st">Guadagno previsto ${eur(gm.total)}</div></span></div>
     ${pendSum?`<button class="row action" data-act="gd-import"><span class="ic" style="background:#007aff22">💶</span><span class="main"><div class="t">Da incassare: <b class="num">${eur(pendSum)}</b></div><div class="st">${pend.length} ${pend.length===1?'giornata':'giornate'} non ancora registrate come entrata</div></span><span class="chev">›</span></button>`
-     :`<div class="row plain"><span class="ic" style="background:var(--fill)">✓</span><span class="main st">${S.settings.gdAuto?'Si aggiornano da sole: ogni giornata lavorata diventa un\'entrata':'Tutte le giornate sono già registrate'}</span></div>`}
+     :`<div class="row plain"><span class="ic" style="background:var(--fill)">✓</span><span class="main st" style="white-space:normal">${S.settings.gdAuto?'Si aggiornano da sole: ogni giornata lavorata diventa un\'entrata':'Tutte le giornate sono già registrate'}</span></div>`}
     </div>${pendSum?`<p class="foot">Le giornate da incassare contano già nella Wishlist come soldi in arrivo.</p>`:''}`; }
   h+=`</div><div>`;
   h+=`<div class="sec">${cap(MONTHS[d.getMonth()])}</div><div class="card duo">
