@@ -275,7 +275,7 @@ const haptic=()=>{ if(navigator.vibrate) navigator.vibrate(8); };
 function defaults(){
   const m=today().slice(0,7);
   return { v:1, setup:false, created:today(),
-    settings:{ startBalance:0, safety:300, savePct:20, splitAsk:true, splitPct:15, splitPiggy:null, giornate:true, gdFrom:m+'-01' },
+    settings:{ startBalance:0, safety:300, savePct:20, splitAsk:true, splitPct:15, splitPiggy:null, giornate:true, gdAuto:true, gdFrom:m+'-01' },
     cats:[
       {id:'food',kind:'out',name:'Cibo & Uscite',emoji:'🍔',color:'#ff9500',limit:0},
       {id:'trans',kind:'out',name:'Trasporti',emoji:'🚗',color:'#007aff',limit:0},
@@ -318,13 +318,22 @@ function giornate(){ // -> [{key,amount}] dei giorni lavorati, o null se l'app n
   return out.sort((a,b)=>a.key<b.key?-1:1); }
 function gdPending(){ if(!S.settings.giornate) return []; const g=giornate()||[], t=today();
   return g.filter(x=>x.key>=S.settings.gdFrom&&x.key<=t&&!S.gdImported[x.key]); }
+function syncGiornate(){ // registra in automatico le giornate lavorate come entrate
+  if(!S.setup||!S.settings.giornate||!S.settings.gdAuto) return false; const g=giornate(); if(!g) return false;
+  const t=today(), from=S.settings.gdFrom, map=new Map(g.filter(x=>x.key>=from&&x.key<=t).map(x=>[x.key,x.amount])); let ch=false;
+  const wc=S.cats.find(c=>c.id==='work')?'work':S.cats.find(c=>c.kind==='in')?.id;
+  S.tx=S.tx.filter(x=>{ if(!x.gdAuto) return true; const k=x.gd[0];
+    if(!map.has(k)&&k>=from&&k<=t){ delete S.gdImported[k]; ch=true; return false; }
+    if(map.has(k)&&map.get(k)!==x.amount){ x.amount=map.get(k); ch=true; } return true; });
+  for(const [k,a] of map){ if(S.gdImported[k]) continue; S.tx.push({id:uid(),type:'in',amount:a,date:k,note:'Giornata di lavoro',cat:wc,tags:[],gd:[k],gdAuto:true}); S.gdImported[k]=true; ch=true; }
+  if(ch) save(); return ch; }
 function gdMonth(ym){ const g=giornate()||[]; const l=g.filter(x=>x.key.startsWith(ym)); return {days:l.length,total:r2(l.reduce((a,x)=>a+x.amount,0))}; }
 
 /* ============ calcoli ============ */
 function sumTx(f){ return r2(S.tx.filter(f).reduce((a,t)=>a+t.amount,0)); }
 function totals(){
   const st=S.created; // i movimenti precedenti all'inizio contano solo nelle statistiche
-  const inn=sumTx(t=>t.type==='in'&&t.date>=st), out=sumTx(t=>t.type==='out'&&t.date>=st);
+  const inn=sumTx(t=>t.type==='in'&&(t.date>=st||t.gd)), out=sumTx(t=>t.type==='out'&&t.date>=st);
   const openCred=r2(S.credits.filter(c=>!c.closed).reduce((a,c)=>a+c.amount,0));
   const total=r2(S.settings.startBalance+inn-out-openCred);
   const inPig=r2(S.piggies.reduce((a,p)=>a+p.balance,0));
@@ -424,7 +433,7 @@ function vHome(){
   if(g){ h+=`<div class="sec">Da Giornate</div><div class="card">
     <div class="row plain"><span class="ic" style="background:#34c75922">🗓️</span><span class="main"><div class="t">${cap(MONTHS[d.getMonth()])}: ${gm.days} ${gm.days===1?'giornata':'giornate'}</div><div class="st">Guadagno previsto ${eur(gm.total)}</div></span></div>
     ${pendSum?`<button class="row action" data-act="gd-import"><span class="ic" style="background:#007aff22">💶</span><span class="main"><div class="t">Da incassare: <b class="num">${eur(pendSum)}</b></div><div class="st">${pend.length} ${pend.length===1?'giornata':'giornate'} non ancora registrate come entrata</div></span><span class="chev">›</span></button>`
-     :`<div class="row plain"><span class="ic" style="background:var(--fill)">✓</span><span class="main st">Tutte le giornate sono già registrate</span></div>`}
+     :`<div class="row plain"><span class="ic" style="background:var(--fill)">✓</span><span class="main st">${S.settings.gdAuto?'Si aggiornano da sole: ogni giornata lavorata diventa un\'entrata':'Tutte le giornate sono già registrate'}</span></div>`}
     </div>${pendSum?`<p class="foot">Le giornate da incassare contano già nella Wishlist come soldi in arrivo.</p>`:''}`; }
   h+=`</div><div>`;
   h+=`<div class="sec">${cap(MONTHS[d.getMonth()])}</div><div class="card duo">
@@ -738,8 +747,9 @@ function settingsSheet(){ const T=totals(); const g=giornate();
       <button class="row" data-act="credits"><span class="ic" style="background:#34c75922">🤝</span><span class="main">Crediti e rimborsi</span><span class="chev">›</span></button></div>
     <div class="sec">App Giornate</div><div class="card">
       <label class="field"><span>Usa le giornate lavorate</span><span class="switch"><input type="checkbox" data-set="giornate" ${S.settings.giornate?'checked':''}><span></span></span></label>
+      <label class="field"><span>Registra in automatico</span><span class="switch"><input type="checkbox" data-set="gdAuto" ${S.settings.gdAuto?'checked':''}><span></span></span></label>
       <label class="field"><span>Conta dal</span><input type="date" data-set="gdFrom" value="${S.settings.gdFrom}"></label></div>
-    <p class="foot">${g?`Trovate ${g.length} giornate lavorate in Giornate su questo dispositivo.`:'Nessun dato di Giornate su questo dispositivo/browser. Le due app devono essere aperte dallo stesso browser.'} I guadagni non ancora incassati contano come entrate previste.</p>
+    <p class="foot">${g?`Trovate ${g.length} giornate lavorate in Giornate su questo dispositivo.`:'Nessun dato di Giornate su questo dispositivo/browser. Le due app devono essere aperte dallo stesso browser.'} ${S.settings.gdAuto?'Ogni giornata segnata in Giornate diventa subito un\'entrata qui (e sparisce se la togli).':'Le giornate non ancora incassate contano come entrate previste: le registri tu con un tocco.'}</p>
     <div class="card" style="margin-top:28px"><button class="row danger" data-act="reset">Cancella tutti i dati</button></div>
     <p class="foot" style="text-align:center">I dati sono salvati solo su questo dispositivo.</p>`}); }
 function recsSheet(){ openSheet({title:'Spese ricorrenti',cancel:'Indietro',
@@ -760,7 +770,7 @@ function onboarding(){ openSheet({title:'Benvenuto',doneLabel:'Inizia',cancel:''
   <label class="field"><span>Soglia di sicurezza</span><input name="safe" type="text" inputmode="decimal" value="300"><span class="muted">€</span></label></div>
   <p class="foot">La soglia è il minimo sotto cui non vuoi mai scendere: non verrà contata nei soldi spendibili. Puoi cambiare tutto dopo nelle impostazioni.</p>
   <div style="margin-top:22px"><button class="btn" data-act="sheet-done">Inizia</button></div>`,
-  done:()=>{ S.settings.startBalance=num(val('bal')); S.settings.safety=num(val('safe')); S.setup=true; S.created=today(); S.settings.gdFrom=today().slice(0,7)+'-01'; save(); closeSheet(); } });
+  done:()=>{ S.settings.startBalance=num(val('bal')); S.settings.safety=num(val('safe')); S.setup=true; S.created=today(); S.settings.gdFrom=today(); save(); syncGiornate(); closeSheet(); } });
   $('#sheet .sh-head').innerHTML='<span></span><span></span><span></span>'; $('#backdrop').onclick=null; }
 
 /* ============ azioni ============ */
@@ -781,7 +791,7 @@ document.addEventListener('click',e=>{ const b=e.target.closest('[data-act]'); i
     case 'tab-mov': go('mov'); break;
     case 'quick-tx': txSheet(null,{type:b.dataset.type}); break;
     case 'tx-edit': txSheet(S.tx.find(t=>t.id===id)); break;
-    case 'tx-del': if(confirm('Eliminare questo movimento?')){ const t=S.tx.find(x=>x.id===id); if(t&&t.gd) for(const k of t.gd) delete S.gdImported[k]; S.tx=S.tx.filter(x=>x.id!==id); save(); closeSheet(); toast('Movimento eliminato'); } break;
+    case 'tx-del': if(confirm('Eliminare questo movimento?')){ const t=S.tx.find(x=>x.id===id); if(t&&t.gd&&!t.gdAuto) for(const k of t.gd) delete S.gdImported[k]; S.tx=S.tx.filter(x=>x.id!==id); save(); closeSheet(); toast('Movimento eliminato'); } break;
     case 'gd-import': gdSheet(); break;
     case 'piggy-new': piggySheet(); break;
     case 'piggy-edit': piggySheet(pig(id)); break;
@@ -808,17 +818,19 @@ document.addEventListener('click',e=>{ const b=e.target.closest('[data-act]'); i
 document.addEventListener('change',e=>{ const el=e.target.closest('[data-set]'); if(!el) return; const k=el.dataset.set;
   if(el.type==='checkbox') S.settings[k]=el.checked; else if(k==='splitPiggy'||k==='gdFrom') S.settings[k]=el.value||null; else S.settings[k]=num(el.value);
   if(k==='gdFrom'&&!S.settings.gdFrom) S.settings.gdFrom=today().slice(0,7)+'-01';
-  save(); if(!$('#sheet').classList.contains('show')) render(); });
+  save(); if(k==='gdAuto'||k==='gdFrom'||k==='giornate') syncGiornate(); if(!$('#sheet').classList.contains('show')) render(); });
 function fitAmount(el){ const v=el.value||el.placeholder||'0'; el.style.width=Math.max(1,[...v].reduce((a,c)=>a+(/[\d]/.test(c)?.62:.32),0))+0.1+'em'; }
 document.addEventListener('input',e=>{ if(e.target.matches('.amount input')) fitAmount(e.target); });
 document.addEventListener('input',e=>{ if(e.target.id==='movSearch'){ movFilter.q=e.target.value; const pos=e.target.selectionStart; render(); const s=$('#movSearch'); s.focus(); s.setSelectionRange(pos,pos); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target.closest('#sheet')&&e.target.tagName==='INPUT'&&sheetDone){ e.preventDefault(); sheetDone(); } });
 $('#fab').onclick=()=>txSheet();
 // aggiorna se Giornate cambia in un'altra scheda, o al ritorno sull'app
-window.addEventListener('storage',e=>{ if(e.key===GKEY||e.key===KEY){ if(e.key===KEY) S=load(); if(!$('#sheet').classList.contains('show')) render(); } });
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ applyRecurring(); if(!$('#sheet').classList.contains('show')) render(); } });
+window.addEventListener('storage',e=>{ if(e.key===GKEY||e.key===KEY){ if(e.key===KEY) S=load(); syncGiornate(); if(!$('#sheet').classList.contains('show')) render(); } });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ applyRecurring(); syncGiornate(); if(!$('#sheet').classList.contains('show')) render(); } });
 
-applyRecurring(); render(); if(!S.setup) onboarding();
+window.addEventListener('focus',()=>{ if(syncGiornate()&&!$('#sheet').classList.contains('show')) render(); });
+setInterval(()=>{ if(!document.hidden&&syncGiornate()&&!$('#sheet').classList.contains('show')) render(); },5000);
+applyRecurring(); syncGiornate(); render(); if(!S.setup) onboarding();
 </script>
 </body>
 </html>
